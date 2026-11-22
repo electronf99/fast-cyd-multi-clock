@@ -13,7 +13,7 @@ void setup()
     digitalWrite(TFT_BL, HIGH);
 
     tft.init();
-    tft.setRotation(0);
+    tft.setRotation(2);
 
     Serial.printf("Width=%d Height=%d\n",
                   tft.width(),
@@ -54,17 +54,6 @@ void setup()
     tft.drawString("BLUE",  160, 90, 2);
     tft.drawString("WHITE", 240, 90, 2);
 
-    uint32_t start = micros();
-
-    for (int i = 0; i < 100; i++)
-    {
-        tft.fillScreen(TFT_BLACK);
-    }
-
-    uint32_t elapsed = micros() - start;
-
-    Serial.printf("Average fillScreen = %.2f ms\n",
-                elapsed / 1000.0 / 100.0);
 
 
 }
