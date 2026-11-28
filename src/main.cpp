@@ -10,6 +10,10 @@
 
 TFT_eSPI tft;
 
+// Which digit in [00558] to display
+// 0..4
+int DIGITNUM = 0;
+
 // Number of display lines transferred at a time
 constexpr int CHUNK_HEIGHT = 46;
 
@@ -19,22 +23,42 @@ constexpr int BACKLIGHT_CHANNEL = 0;
 // Buffer used for SD/LittleFS transfers and TFT drawing
 uint16_t buffer[320 * CHUNK_HEIGHT];
 
-//
-// Set TFT backlight brightness
-// 0   = off
-// 255 = full brightness
-//
+char currentDigit = '\0';
+
+char packet[8];
+int packetPos = 0;
+
+
+int digitPosition = 0;
+
+void loadDigitPosition()
+{
+    File f = SD.open("/DIGITNUM");
+
+    if (!f)
+    {
+        Serial.println("DIGITNUM not found on sdcard");
+        return;
+    }
+
+    String s = f.readStringUntil('\n');
+    s.trim();
+
+    digitPosition = s.toInt();
+
+    Serial.printf(
+        "Digit position = %d\n",
+        digitPosition);
+
+    f.close();
+}
+
+
 void setBrightness(uint8_t brightness)
 {
     ledcWrite(BACKLIGHT_CHANNEL, brightness);
 }
 
-//
-// Fade the display down.
-//
-// This is intentionally quite slow to
-// simulate a nixie tube cooling down.
-//
 void fadeOut(int maxValue, int minValue, int delayValue)
 {
     for (int b = maxValue; b >= minValue; b -= 3)
@@ -44,12 +68,6 @@ void fadeOut(int maxValue, int minValue, int delayValue)
     }
 }
 
-//
-// Fade the display up.
-//
-// This creates a nice "tube warming up"
-// visual effect.
-//
 void fadeIn(int minValue, int maxValue)
 {
     for (int b = minValue; b <= maxValue; b += 1)
@@ -59,13 +77,6 @@ void fadeIn(int minValue, int maxValue)
     }
 }
 
-//
-// Copy a raw image from SD card
-// into the LittleFS cache.
-//
-// The current image remains visible
-// while this happens.
-//
 void copySdToLittleFS(const char *src, const char *dst)
 {
     File in = SD.open(src);
@@ -106,17 +117,6 @@ void copySdToLittleFS(const char *src, const char *dst)
     in.close();
 }
 
-//
-// Draw an image stored in LittleFS.
-//
-// The screen fades down,
-// redraw happens while dark,
-// then the image slowly "warms up"
-// and settles.
-//
-// This completely hides the redraw
-// and produces a convincing nixie effect.
-//
 void drawLittleFSImage(const char *filename)
 {
     File f = LittleFS.open(filename, "r");
@@ -129,10 +129,8 @@ void drawLittleFSImage(const char *filename)
         return;
     }
 
-    // Cool down the old digit
-    fadeOut(200, 0, 10);
+    fadeOut(240, 0, 10);
 
-    // Draw new image while dark
     for (int y = 0; y < 240; y += CHUNK_HEIGHT)
     {
         int lines = min(CHUNK_HEIGHT, 240 - y);
@@ -158,39 +156,51 @@ void drawLittleFSImage(const char *filename)
 
     delay(5);
 
-    // Warm up the new digit
-    fadeIn(30, 245);
+    fadeIn(30, 255);
 
-    // Let it cool slightly
-    // so it settles naturally
-    fadeOut(255, 250, 30);
+    fadeOut(255, 254, 30);
 
     f.close();
+}
+
+void showDigit(char digit)
+{
+    if (digit == currentDigit)
+        return;
+
+    currentDigit = digit;
+
+    char filename[32];
+
+    snprintf(
+        filename,
+        sizeof(filename),
+        "/nixie-%c.raw",
+        digit);
+
+    Serial.printf("Loading %s\n", filename);
+
+    copySdToLittleFS(
+        filename,
+        "/current.raw");
+
+    drawLittleFSImage(
+        "/current.raw");
 }
 
 void setup()
 {
     Serial.begin(115200);
 
-    //
-    // Configure backlight PWM
-    //
     ledcSetup(BACKLIGHT_CHANNEL, 1000, 8);
     ledcAttachPin(TFT_BL, BACKLIGHT_CHANNEL);
 
-    // Start at full brightness
     ledcWrite(BACKLIGHT_CHANNEL, 245);
 
-    //
-    // TFT setup
-    //
     tft.init();
     tft.setRotation(1);
     tft.setSwapBytes(true);
 
-    //
-    // LittleFS setup
-    //
     if (!LittleFS.begin(true))
     {
         Serial.println("LittleFS failed");
@@ -199,9 +209,6 @@ void setup()
             delay(1000);
     }
 
-    //
-    // SD card setup
-    //
     if (!SD.begin(SD_CS))
     {
         Serial.println("SD failed");
@@ -209,44 +216,54 @@ void setup()
         while (true)
             delay(1000);
     }
+    
+    loadDigitPosition();
+    
+    Serial2.begin(
+        115200,
+        SERIAL_8N1,
+        22,
+        27);
 
     Serial.println("Starting...");
 }
 
 void loop()
 {
-    static int digit = 0;
-
-    char filename[32];
-
-    snprintf(
-        filename,
-        sizeof(filename),
-        "/nixie-%d.raw",
-        digit);
-
-    Serial.printf("Loading %s\n", filename);
-
-    //
-    // Copy new image into cache
-    //
-    copySdToLittleFS(
-        filename,
-        "/current.raw");
-
-    //
-    // Display image with
-    // nixie warm-up effect
-    //
-    drawLittleFSImage(
-        "/current.raw");
-
-    digit++;
-
-    if (digit > 9)
+    while (Serial2.available())
     {
-        digit = 0;
-    }
+        char c = Serial2.read();
 
-    delay(10);
+        if (c == '[')
+        {
+            packetPos = 0;
+        }
+        else if (c == ']')
+        {
+            packet[packetPos] = '\0';
+
+            Serial.printf("Packet: %s\n", packet);
+
+            if (strlen(packet) == 5)
+            {
+                char digit =
+                    packet[DIGITNUM];
+
+                Serial.printf(
+                    "Displaying digit: %c\n",
+                    digit);
+
+                showDigit(digit);
+            }
+
+            packetPos = 0;
+        }
+        else
+        {
+            if (packetPos < sizeof(packet) - 1)
+            {
+                packet[packetPos++] = c;
+            }
+        }
+    }
 }
