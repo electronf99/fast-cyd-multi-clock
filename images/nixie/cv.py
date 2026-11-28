@@ -23,23 +23,24 @@ for name in files:
 
     img = Image.open(input_file).convert("RGB")
 
-    # Rotate the other direction
-    img = img.rotate(-90, expand=True)
+    #
+    # No rotation
+    #
+    img.thumbnail((240, 320), Image.LANCZOS)
 
-    # Preserve aspect ratio
-    img.thumbnail((320, 240), Image.LANCZOS)
+    #
+    # Create 240x320 canvas
+    #
+    canvas = Image.new("RGB", (240, 320), (0, 0, 0))
 
-    # Centre on black background
-    canvas = Image.new("RGB", (320, 240), (0, 0, 0))
-
-    x = (320 - img.width) // 2
-    y = (240 - img.height) // 2
+    x = (240 - img.width) // 2
+    y = (320 - img.height) // 2
 
     canvas.paste(img, (x, y))
 
     with open(output_file, "wb") as f:
-        for py in range(240):
-            for px in range(320):
+        for py in range(320):
+            for px in range(240):
                 r, g, b = canvas.getpixel((px, py))
 
                 rgb565 = (
@@ -48,11 +49,11 @@ for name in files:
                     | (b >> 3)
                 )
 
-                # Little-endian RGB565
-                # Matches your:
-                # tft.setSwapBytes(true)
-                f.write(rgb565.to_bytes(2, "little"))
+                f.write(
+                    rgb565.to_bytes(
+                        2,
+                        "little"))
 
-    print(f"  -> {output_file}")
+    print(f" -> {output_file}")
 
 print("Done")
