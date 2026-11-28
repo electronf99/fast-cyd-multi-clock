@@ -35,12 +35,12 @@ void setBrightness(uint8_t brightness)
 // This is intentionally quite slow to
 // simulate a nixie tube cooling down.
 //
-void fadeOut(int maxValue, int minValue)
+void fadeOut(int maxValue, int minValue, int delayValue)
 {
     for (int b = maxValue; b >= minValue; b -= 3)
     {
         setBrightness(b);
-        delay(5);
+        delay(delayValue);
     }
 }
 
@@ -55,7 +55,7 @@ void fadeIn(int minValue, int maxValue)
     for (int b = minValue; b <= maxValue; b += 1)
     {
         setBrightness(b);
-        delay(10);
+        delay(5);
     }
 }
 
@@ -130,7 +130,7 @@ void drawLittleFSImage(const char *filename)
     }
 
     // Cool down the old digit
-    fadeOut(200, 0);
+    fadeOut(200, 0, 10);
 
     // Draw new image while dark
     for (int y = 0; y < 240; y += CHUNK_HEIGHT)
@@ -159,11 +159,11 @@ void drawLittleFSImage(const char *filename)
     delay(5);
 
     // Warm up the new digit
-    fadeIn(0, 255);
+    fadeIn(30, 245);
 
     // Let it cool slightly
     // so it settles naturally
-    fadeOut(255, 200);
+    fadeOut(255, 250, 30);
 
     f.close();
 }
@@ -179,7 +179,7 @@ void setup()
     ledcAttachPin(TFT_BL, BACKLIGHT_CHANNEL);
 
     // Start at full brightness
-    ledcWrite(BACKLIGHT_CHANNEL, 255);
+    ledcWrite(BACKLIGHT_CHANNEL, 245);
 
     //
     // TFT setup
@@ -248,5 +248,5 @@ void loop()
         digit = 0;
     }
 
-    delay(400);
+    delay(10);
 }
